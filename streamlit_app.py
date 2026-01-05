@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 
-# 1. إعدادات التصميم (إصلاح ألوان الخطوط والمربعات)
+# 1. إعدادات التصميم المتطور
 st.set_page_config(page_title="our goal study", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -9,23 +9,19 @@ st.markdown("""
     [data-testid="stSidebar"] {display: none;}
     .stApp { background-color: #000; color: #fff; font-family: 'Cairo', sans-serif; }
     
-    /* جعل الخط أبيض في خانات الإدخال */
     input { color: white !important; background-color: #1a1a1a !important; border: 1px solid #D4AF37 !important; }
-    label { color: white !important; font-size: 18px !important; }
+    label { color: white !important; font-size: 18px; }
     
-    /* تصميم مربعات الأعضاء المحترف */
-    .member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
     .member-card { 
         background: #111; border: 1px solid #333; border-radius: 15px; 
         padding: 20px; text-align: center; border-bottom: 4px solid #D4AF37;
     }
-    .avatar-img { font-size: 50px; margin-bottom: 10px; display: block; }
     .study-subject { color: #000; font-size: 13px; background: #D4AF37; padding: 3px 10px; border-radius: 10px; font-weight: bold; display: inline-block; margin-top: 8px; }
 
-    /* شاشة الاستعداد والتايمر */
     .timer-display { font-size: 100px; text-align: center; font-weight: bold; color: #D4AF37; }
-    .ready-msg { font-size: 60px; text-align: center; color: #fff; font-weight: bold; animation: pulse 1s infinite; margin: 20px; }
-    @keyframes pulse { 0% {transform: scale(1);} 50% {transform: scale(1.05);} 100% {transform: scale(1);} }
+    .countdown-text { font-size: 150px; text-align: center; color: #fff; font-weight: bold; }
+    .status-msg { font-size: 50px; text-align: center; color: #fff; font-weight: bold; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% {opacity: 1;} 50% {opacity: 0.5;} 100% {opacity: 1;} }
     
     .stButton>button { background: #D4AF37 !important; color: #000 !important; font-weight: bold !important; border-radius: 10px !important; height: 45px; }
     </style>
@@ -42,7 +38,7 @@ def get_db():
 db = get_db()
 
 def format_time(seconds):
-    mins, secs = divmod(int(seconds), 60)
+    mins, secs = divmod(int(max(0, seconds)), 60)
     return f"{mins:02d}:{secs:02d}"
 
 # ----------------- الواجهة الرئيسية -----------------
@@ -71,20 +67,42 @@ with tabs[0]:
                 st.rerun()
             else: st.error("تأكد من الكود والبيانات")
     else:
-        # عرض الحالة بناءً على قرار الأدمن
+        # 1. منطق عرض الحالة (العد التنازلي، التايمر، الراحة)
         if db["status"] == "ready":
-            st.markdown("<div class='ready-msg'>⚠️ استعدووووو...</div>", unsafe_allow_html=True)
-        elif db["status"] == "running":
-            elapsed = time.time() - db["last_update"]
-            db["remaining_seconds"] -= elapsed
-            db["last_update"] = time.time()
-            st.markdown(f"<div class='timer-display'>{format_time(db['remaining_seconds'])}</div>", unsafe_allow_html=True)
-            time.sleep(1)
-            st.rerun()
-        elif db["status"] == "break":
-            st.markdown("<h2 style='text-align:center;'>☕ وقت راحة..</h2>", unsafe_allow_html=True)
+            st.markdown("<div class='status-msg'>⚠️ استعدووووو...</div>", unsafe_allow_html=True)
         
-        # عرض المربعات للأعضاء
+        elif db["status"] == "counting":
+            # عد تنازلي 3 ثواني
+            for i in range(3, 0, -1):
+                st.markdown(f"<div class='countdown-text'>{i}</div>", unsafe_allow_html=True)
+                time.sleep(1)
+                st.rerun()
+            db["status"] = "running"
+            db["last_update"] = time.time()
+            st.rerun()
+
+        elif db["status"] == "running":
+            now = time.time()
+            elapsed = now - db["last_update"]
+            db["remaining_seconds"] -= elapsed
+            db["last_update"] = now
+            
+            if db["remaining_seconds"] > 0:
+                st.markdown(f"<div class='timer-display'>{format_time(db['remaining_seconds'])}</div>", unsafe_allow_html=True)
+                time.sleep(1)
+                st.rerun()
+            else:
+                db["status"] = "finished"
+                st.balloons()
+        
+        elif db["status"] == "break":
+            st.markdown("<div class='status-msg'>☕ وقت راحة..</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='timer-display' style='color:#555'>{format_time(db['remaining_seconds'])}</div>", unsafe_allow_html=True)
+        
+        elif db["status"] == "finished":
+            st.success("🎉 انتهت الجلسة! خذ قسطاً من الراحة.")
+
+        # 2. عرض المربعات (الزملاء)
         st.write("---")
         st.subheader(f"👥 الزملاء الحاضرون ({len(db['members'])})")
         cols = st.columns(6)
@@ -92,7 +110,7 @@ with tabs[0]:
             with cols[i % 6]:
                 st.markdown(f"""
                     <div class='member-card'>
-                        <span class='avatar-img'>{m['avatar']}</span>
+                        <span style='font-size:50px;'>{m['avatar']}</span><br>
                         <b style='color:white;'>{m['name']}</b><br>
                         <span class='study-subject'>📖 {m['subject']}</span>
                     </div>
@@ -102,50 +120,52 @@ with tabs[0]:
 with tabs[1]:
     admin_pass = st.text_input("كلمة السر", type="password")
     if admin_pass == "our122122":
-        # عرض سجل المستخدمين للأدمن
-        st.subheader("👥 الحاضرون الآن (للمسؤول)")
-        if db["members"]:
-            st.table(db["members"])
+        st.subheader("👥 الحاضرون الآن")
+        st.table(db["members"])
         
         st.write("---")
-        # جدول المواعيد
-        st.subheader("📅 إضافة موعد للجدول")
-        col_t, col_d = st.columns(2)
-        with col_t: r_time = st.text_input("الوقت (مثلاً 06:00 م)")
-        with col_d: r_dur = st.number_input("المدة", 5, 120, 60)
-        if st.button("نشر في الجدول"):
-            db["schedule"].append({"time": r_time, "duration": r_dur})
-            st.success("تم النشر")
-
-        st.write("---")
-        # أزرار التحكم بالروم
+        # التحكم بالروم
         if not db["room_id"]:
+            mins = st.number_input("المدة (دقيقة)", 5, 120, 45)
             if st.button("🚀 إنشاء روم جديدة"):
                 import random
                 db["room_id"] = str(random.randint(100000, 999999))
-                db["remaining_seconds"] = 3600 
+                db["remaining_seconds"] = mins * 60
                 db["status"] = "waiting"
                 st.rerun()
         else:
-            st.info(f"الكود: {db['room_id']}")
+            st.info(f"كود الروم: {db['room_id']}")
             c1, c2, c3, c4 = st.columns(4)
-            with c1: 
-                if st.button("🔔 استعدوا"): db["status"] = "ready"
-            with c2: 
-                if st.button("▶️ ابدأ"): 
-                    db["status"] = "running"
-                    db["last_update"] = time.time()
+            with c1:
+                if st.button("🔔 استعدوا"): 
+                    db["status"] = "ready"
                     st.rerun()
-            with c3: 
-                if st.button("⏸️ راحة"): db["status"] = "break"
-            with c4: 
-                if st.button("🛑 إنهاء الكل"):
-                    db["room_id"] = None
-                    db["members"] = []
-                    db["status"] = "off"
+            with c2:
+                if db["status"] != "running":
+                    if st.button("▶️ بدء (3 ثواني)"):
+                        db["status"] = "counting"
+                        st.rerun()
+            with c3:
+                if db["status"] == "running":
+                    if st.button("⏸️ راحة (إيقاف)"):
+                        db["status"] = "break"
+                        st.rerun()
+            with c4:
+                if st.button("🛑 إنهاء الروم"):
+                    db.update({"room_id": None, "members": [], "status": "off"})
                     st.rerun()
+                    
+        # إضافة جدول المواعيد
+        st.write("---")
+        st.subheader("📅 إضافة للجدول")
+        col1, col2 = st.columns(2)
+        t_val = col1.text_input("الوقت")
+        d_val = col2.number_input("المدة", 5, 120, 60, key="admin_dur")
+        if st.button("نشر الموعد"):
+            db["schedule"].append({"time": t_val, "duration": d_val})
+            st.success("تم النشر")
 
-# تحديث تلقائي
-if db["room_id"]:
-    time.sleep(2)
+# تحديث تلقائي للطلاب
+if db["room_id"] and db["status"] in ["waiting", "ready", "break"]:
+    time.sleep(3)
     st.rerun()

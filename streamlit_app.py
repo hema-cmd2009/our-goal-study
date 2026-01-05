@@ -152,4 +152,35 @@ elif st.session_state.page == "room":
     for i, m in enumerate(db["members"]):
         with cols[i % 6]:
             hand_html = "<div class='hand-icon'>✋ رفع يده</div>" if m['name'] in db['raised_hands'] else ""
-            st.markdown(f"<div class='member-card'>{hand_html}👤<br><b>{m['name']}</b></div>", unsafe_allow_html=True
+            st.markdown(f"<div class='member-card'>{hand_html}👤<br><b>{m['name']}</b></div>", unsafe_allow_html=True)
+
+# ----------------- لوحة الإدارة -----------------
+with st.expander("🛠️ الإدارة"):
+    if st.text_input("كلمة السر", type="password") == "our122122":
+        if not db["room_id"]:
+            c1, c2, c3 = st.columns(3)
+            r_num = c1.number_input("عدد الجولات", 1, 10, 3)
+            s_min = c2.number_input("مذاكرة (د)", 1, 120, 25)
+            b_min = c3.number_input("راحة (د)", 1, 30, 5)
+            if st.button("🚀 فتح الروم"):
+                db.update({"room_id": str(random.randint(1000, 9999)), "total_rounds": r_num, "current_round": 1, 
+                           "study_time": s_min*60, "break_time": b_min*60, "study_time_orig": s_min*60, "break_time_orig": b_min*60})
+                st.rerun()
+        else:
+            st.success(f"كود الروم: {db['room_id']}")
+            if st.button("▶️ ابدأ الجولة الأولى"): db["status"] = "counting"; db["countdown"] = 10; st.rerun()
+            if st.button("✅ مسح رفع اليد"): db["raised_hands"] = []; st.rerun()
+            msg = st.text_area("رسالة تنبيه"); 
+            if st.button("📢 إرسال"): db["admin_msg"] = msg; db["trigger_sound"] = SOUNDS["notif"]; st.rerun()
+            if st.button("🛑 إنهاء الروم"): db.update({"room_id": None, "members": [], "status": "off"}); st.rerun()
+        
+        # إدارة الجدول
+        st.write("---")
+        t_val = st.text_input("موعد الجلسة")
+        r_val = st.number_input("الجولات", 1, 10, 4)
+        d_val = st.number_input("المدة", 5, 120, 45)
+        if st.button("➕ إضافة للجدول"): db["schedule"].append({"time": t_val, "rounds": r_val, "duration": d_val}); st.rerun()
+        if st.button("🗑️ مسح الجدول"): db["schedule"] = []; st.rerun()
+
+if db["room_id"] and st.session_state.page == "room":
+    time.sleep(2); st.rerun()

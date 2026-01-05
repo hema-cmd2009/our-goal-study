@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 
-# 1. إعدادات التصميم والخطوط الواضحة
+# 1. إعدادات التصميم
 st.set_page_config(page_title="our goal study", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -9,31 +9,25 @@ st.markdown("""
     [data-testid="stSidebar"] {display: none;}
     .stApp { background-color: #000; color: #D4AF37; font-family: 'Cairo', sans-serif; }
     
-    /* تصميم مربعات الأعضاء */
     .member-card { 
         background: #111; border: 1px solid #333; border-radius: 15px; 
-        padding: 15px; text-align: center; transition: 0.3s;
+        padding: 15px; text-align: center; border-bottom: 4px solid #D4AF37;
     }
-    .member-card:hover { border-color: #D4AF37; }
+    .study-subject { color: #fff; font-size: 14px; background: #222; padding: 2px 8px; border-radius: 10px; margin-top: 5px; display: inline-block; }
     
-    /* التايمر */
-    .timer-display { font-size: 100px; text-align: center; font-weight: bold; color: #D4AF37; margin: 10px 0; }
-    .status-text { font-size: 50px; text-align: center; color: #fff; font-weight: bold; animation: pulse 1s infinite; }
-    @keyframes pulse { 0% {opacity: 1;} 50% {opacity: 0.5;} 100% {opacity: 1;} }
-    
-    .stButton>button { background: #D4AF37 !important; color: #000 !important; font-weight: bold !important; border-radius: 10px !important; width: 100%; height: 50px; }
+    .schedule-card { background: #1a1a1a; border: 1px dashed #D4AF37; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
+    .timer-display { font-size: 100px; text-align: center; font-weight: bold; color: #D4AF37; }
+    .stButton>button { background: #D4AF37 !important; color: #000 !important; font-weight: bold !important; border-radius: 10px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. قاعدة البيانات المشتركة (Database)
+# 2. قاعدة البيانات المشتركة
 @st.cache_resource
 def get_db():
     return {
-        "room_id": None, 
-        "status": "off", # off, waiting, ready, running, break
-        "remaining_seconds": 0,
-        "last_update": None,
-        "members": []
+        "room_id": None, "status": "off", "remaining_seconds": 0, "last_update": None,
+        "members": [],
+        "schedule": [] # قائمة لتخزين جدول الرومات
     }
 
 db = get_db()
@@ -43,90 +37,101 @@ def format_time(seconds):
     return f"{mins:02d}:{secs:02d}"
 
 # ----------------- الواجهة الرئيسية -----------------
-st.image("logo.png", width=100)
-st.title("Our Goal Study 🎓")
-
-tabs = st.tabs(["👤 ساحة المذاكرة", "🛡️ لوحة التحكم"])
+st.image("logo.png", width=80)
+tabs = st.tabs(["👤 ساحة المذاكرة", "🛡️ لوحة الإدارة"])
 
 # --- تبويب الطلاب ---
 with tabs[0]:
+    # عرض جدول الرومات المخطط لها
+    if db["schedule"]:
+        with st.expander("📅 جدول رومات اليوم (اضغط للتفاصيل)"):
+            for item in db["schedule"]:
+                st.markdown(f"<div class='schedule-card'>⏰ الوقت: {item['time']} | ⏳ المدة: {item['duration']} دقيقة</div>", unsafe_allow_html=True)
+
     if not st.session_state.get('joined', False):
-        st.subheader("انضم للجلسة")
-        c_code = st.text_input("كود الروم المكون من 6 أرقام")
+        st.subheader("تسجيل الدخول للجلسة")
+        c_code = st.text_input("كود الروم")
         c_name = st.text_input("اسمك")
-        if st.button("تأكيد الانضمام"):
-            if db["room_id"] and c_code == db["room_id"] and c_name:
-                if c_name not in [m['name'] for m in db["members"]]:
-                    db["members"].append({"name": c_name})
+        c_subject = st.text_input("هتذاكر إيه النهاردة؟ (مثال: رياضيات، فيزياء)")
+        
+        if st.button("انضمام الآن"):
+            if db["room_id"] and c_code == db["room_id"] and c_name and c_subject:
+                db["members"].append({"name": c_name, "subject": c_subject})
                 st.session_state.joined = True
                 st.session_state.user_name = c_name
                 st.rerun()
-            else: st.error("تأكد من الكود أو أن المسؤول فتح الروم")
+            else: st.error("تأكد من الكود وكمال البيانات")
     else:
-        # عرض الحالة (استعداد، راحة، أو تايمر)
-        if db["status"] == "ready":
-            st.markdown("<div class='status-text'>⚠️ استعدووووو...</div>", unsafe_allow_html=True)
-        elif db["status"] == "break":
-            st.markdown("<div class='status-text' style='color:#fff'>☕ وقت راحة..</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='timer-display' style='color:#555'>{format_time(db['remaining_seconds'])}</div>", unsafe_allow_html=True)
-        elif db["status"] == "running":
+        # عرض التايمر أو الحالة
+        if db["status"] == "running":
             elapsed = time.time() - db["last_update"]
             db["remaining_seconds"] -= elapsed
             db["last_update"] = time.time()
-            if db["remaining_seconds"] > 0:
-                st.markdown(f"<div class='timer-display'>{format_time(db['remaining_seconds'])}</div>", unsafe_allow_html=True)
-                time.sleep(1)
-                st.rerun()
-            else:
-                db["status"] = "off"
-                st.success("انتهت الجلسة!")
+            st.markdown(f"<div class='timer-display'>{format_time(db['remaining_seconds'])}</div>", unsafe_allow_html=True)
+            time.sleep(1)
+            st.rerun()
+        elif db["status"] == "break":
+            st.markdown("<h2 style='text-align:center;'>☕ وقت راحة..</h2>", unsafe_allow_html=True)
         
-        # عرض الزملاء بمربعات
+        # عرض الزملاء بالمربعات مع مادة المذاكرة
         st.write("---")
-        st.subheader(f"الزملاء الحاضرون ({len(db['members'])})")
-        cols = st.columns(6)
+        st.subheader(f"👥 الزملاء الحاضرون ({len(db['members'])})")
+        cols = st.columns(5)
         for i, m in enumerate(db["members"]):
-            with cols[i % 6]:
-                st.markdown(f"<div class='member-card'>👤<br>{m['name']}</div>", unsafe_allow_html=True)
+            with cols[i % 5]:
+                st.markdown(f"""
+                    <div class='member-card'>
+                        <span style='font-size:40px;'>👤</span><br>
+                        <span style='color:#D4AF37; font-weight:bold;'>{m['name']}</span><br>
+                        <span class='study-subject'>📖 {m['subject']}</span>
+                    </div>
+                """, unsafe_allow_html=True)
 
-# --- تبويب المسؤول ---
+# --- تبويب الإدارة ---
 with tabs[1]:
-    # تأكد من إدخال الباسورد أولاً
-    admin_pass = st.text_input("أدخل كلمة سر المسؤول للإظهار", type="password")
-    
+    admin_pass = st.text_input("كلمة السر للإدارة", type="password")
     if admin_pass == "our122122":
+        
+        # قسم جدول المواعيد
+        st.subheader("📅 تنظيم جدول الرومات")
+        col_t, col_d = st.columns(2)
+        with col_t: r_time = st.text_input("موعد الروم (مثلاً: 02:00 م)")
+        with col_d: r_dur = st.number_input("المدة بالدقائق", 5, 120, 60)
+        
+        if st.button("➕ إضافة للجدول ونشر"):
+            db["schedule"].append({"time": r_time, "duration": r_dur})
+            st.success("تمت إضافة الموعد للجدول!")
+            
+        if st.button("🗑️ مسح الجدول"):
+            db["schedule"] = []
+            st.rerun()
+
+        st.write("---")
+        
+        # قسم التحكم بالروم الحالية
         if not db["room_id"]:
-            st.subheader("خطوة 1: إعداد الروم")
-            mins = st.number_input("مدة المذاكرة (دقيقة)", 5, 120, 45)
-            if st.button("🚀 إنشاء الروم وتوليد الكود"):
+            if st.button("🚀 فتح روم جديدة الآن"):
                 import random
                 db["room_id"] = str(random.randint(100000, 999999))
-                db["remaining_seconds"] = mins * 60
+                db["remaining_seconds"] = 60 * 60 # افتراضي ساعة
                 db["status"] = "waiting"
                 st.rerun()
         else:
-            st.success(f"الروم نشطة بالكود: {db['room_id']}")
-            
-            # أزرار التحكم
-            c1, c2, c3, c4 = st.columns(4)
+            st.success(f"الروم مفتوحة بكود: {db['room_id']}")
+            c1, c2, c3 = st.columns(3)
             with c1:
-                if st.button("🔔 تنبيه استعدوا"): db["status"] = "ready"
-            with c2:
-                if st.button("▶️ بدء/استكمال"):
+                if st.button("▶️ بدء"):
                     db["status"] = "running"
                     db["last_update"] = time.time()
+            with c2:
+                if st.button("⏸️ راحة"): db["status"] = "break"
             with c3:
-                if st.button("⏸️ راحة (إيقاف)"): db["status"] = "break"
-            with c4:
-                if st.button("🛑 إنهاء الكل"):
+                if st.button("🛑 إنهاء"):
                     db["room_id"] = None
-                    db["status"] = "off"
                     db["members"] = []
                     st.rerun()
-    else:
-        st.warning("يرجى إدخال الباسورد الصحيح لتظهر لك أزرار التحكم.")
 
-# تحديث تلقائي للطلاب لمتابعة التغييرات
+# تحديث تلقائي
 if db["room_id"]:
     time.sleep(3)
     st.rerun()

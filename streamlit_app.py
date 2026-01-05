@@ -1,6 +1,5 @@
 import streamlit as st
 import time
-from datetime import datetime, timedelta
 
 # 1. إعدادات التصميم (Dark Gold Theme)
 st.set_page_config(page_title="our goal study", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
@@ -15,14 +14,13 @@ st.markdown("""
     label { color: #D4AF37 !important; font-weight: bold; font-size: 18px; }
     
     /* تنسيق المربعات والتايمر */
-    .schedule-box { border: 2px solid #D4AF37; padding: 20px; border-radius: 15px; background: #111; margin-bottom: 25px; }
-    .wait-timer { font-size: 50px; color: #fff; text-align: center; font-weight: bold; text-shadow: 0 0 10px #D4AF37; }
+    .schedule-box { border: 2px solid #D4AF37; padding: 15px; border-radius: 15px; background: #111; margin-bottom: 20px; }
     .member-card { background: #111; border: 1px solid #333; border-radius: 15px; padding: 15px; text-align: center; border-bottom: 4px solid #D4AF37; }
     .study-subject { color: #000; background: #D4AF37; padding: 2px 8px; border-radius: 10px; font-weight: bold; display: inline-block; margin-top: 5px; }
     .main-timer { font-size: 110px; text-align: center; font-weight: bold; color: #D4AF37; }
-    .countdown-10 { font-size: 200px; text-align: center; color: #D4AF37; font-weight: bold; }
+    .countdown-display { font-size: 200px; text-align: center; color: #D4AF37; font-weight: bold; }
     
-    .stButton>button { background: #D4AF37 !important; color: #000 !important; font-weight: bold !important; border-radius: 10px !important; width: 100%; height: 50px; }
+    .stButton>button { background: #D4AF37 !important; color: #000 !important; font-weight: bold !important; border-radius: 10px !important; width: 100%; height: 45px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -31,7 +29,7 @@ st.markdown("""
 def get_db():
     return {
         "room_id": None, "status": "off", "remaining_seconds": 0, "last_update": None,
-        "members": [], "schedule": [] 
+        "members": [], "schedule": [], "countdown_val": 10
     }
 
 db = get_db()
@@ -43,23 +41,11 @@ def format_time(seconds):
 # ----------------- الواجهة الرئيسية -----------------
 st.image("logo.png", width=100)
 
-# أ. جدول المواعيد الخارجي (يظهر قبل الدخول)
+# أ. الجدول الخارجي (تم حذف العد التنازلي)
 if db["schedule"] and not st.session_state.get('joined', False):
-    st.markdown("<div class='schedule-box'><h2 style='text-align:center; color:#D4AF37;'>📅 مواعيد الرومات القادمة</h2></div>", unsafe_allow_html=True)
+    st.markdown("<div class='schedule-box'><h2 style='text-align:center; color:#D4AF37;'>📅 جدول المواعيد</h2></div>", unsafe_allow_html=True)
     for item in db["schedule"]:
-        c_info, c_timer = st.columns([2, 1])
-        with c_info:
-            st.markdown(f"### ⏰ الموعد: {item['time']} \n **المدة:** {item['duration']} دقيقة")
-        with c_timer:
-            # ضبط التوقيت ليكون محلياً (إصلاح مشكلة الـ 4 ساعات)
-            now = datetime.now()
-            try:
-                t_p = item['time'].split(':')
-                target = now.replace(hour=int(t_p[0]), minute=int(t_p[1]), second=0, microsecond=0)
-                if target < now: target += timedelta(days=1)
-                diff = target - now
-                st.markdown(f"<div class='wait-timer'>{str(diff).split('.')[0]}</div>", unsafe_allow_html=True)
-            except: st.write("تنسيق الوقت خطأ")
+        st.markdown(f"### ⏰ الموعد: <span style='color:#D4AF37;'>{item['time']}</span> | المدة: {item['duration']} دقيقة", unsafe_allow_html=True)
     st.write("---")
 
 tabs = st.tabs(["👤 ساحة المذاكرة", "🛡️ لوحة الإدارة"])
@@ -67,7 +53,7 @@ tabs = st.tabs(["👤 ساحة المذاكرة", "🛡️ لوحة الإدار
 # --- تبويب الطلاب ---
 with tabs[0]:
     if not st.session_state.get('joined', False):
-        st.subheader("🔑 انضم للروم الحالية")
+        st.subheader("🔑 دخول الروم")
         c1, c2, c3 = st.columns(3)
         code_in = c1.text_input("كود الروم")
         name_in = c2.text_input("اسمك")
@@ -79,17 +65,22 @@ with tabs[0]:
                 st.rerun()
             else: st.error("تأكد من البيانات والكود")
     else:
-        # نظام الحالات (العد التنازلي والتايمر)
+        # نظام الحالات
         if db["status"] == "ready":
             st.markdown("<h1 style='text-align:center;'>⚠️ استعدووووو...</h1>", unsafe_allow_html=True)
+        
         elif db["status"] == "counting":
-            for i in range(10, 0, -1):
-                st.markdown(f"<div class='countdown-10'>{i}</div>", unsafe_allow_html=True)
+            # إصلاح مشكلة ثبات الـ 10 ثواني
+            if db["countdown_val"] > 0:
+                st.markdown(f"<div class='countdown-display'>{db['countdown_val']}</div>", unsafe_allow_html=True)
                 time.sleep(1)
+                db["countdown_val"] -= 1
                 st.rerun()
-            db["status"] = "running"
-            db["last_update"] = time.time()
-            st.rerun()
+            else:
+                db["status"] = "running"
+                db["last_update"] = time.time()
+                st.rerun()
+
         elif db["status"] == "running":
             now = time.time()
             db["remaining_seconds"] -= (now - db["last_update"])
@@ -101,10 +92,12 @@ with tabs[0]:
             else:
                 db["status"] = "off"
                 st.balloons()
+        
         elif db["status"] == "break":
-            st.markdown("<h1 style='text-align:center;'>☕ وقت راحة.. ارتاح شوية</h1>", unsafe_allow_html=True)
-            st.markdown(f"<div class='main-timer' style='color:#555;'>{format_time(db['remaining_seconds'])}</div>", unsafe_allow_html=True)
+            st.markdown("<h1 style='text-align:center;'>☕ وقت راحة..</h1>", unsafe_allow_html=True)
+            st.markdown(f"<div class='main-timer' style='color:#444;'>{format_time(db['remaining_seconds'])}</div>", unsafe_allow_html=True)
 
+        # مربعات الزملاء
         st.write("---")
         cols = st.columns(6)
         for i, m in enumerate(db["members"]):
@@ -126,41 +119,44 @@ with tabs[1]:
                 db.update({"room_id": str(random.randint(100000, 999999)), "remaining_seconds": m_val * 60, "status": "waiting"})
                 st.rerun()
         else:
-            st.info(f"كود الروم الحالي: {db['room_id']}")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                if st.button("🔔 استعدوا"):
-                    db["status"] = "ready"
+            st.info(f"كود الروم: {db['room_id']}")
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1:
+                if st.button("🔔 استعدوا"): db["status"] = "ready"; st.rerun()
+            with c2:
+                if st.button("🔟 ابدأ (عد 10)"):
+                    db["status"] = "counting"
+                    db["countdown_val"] = 10
                     st.rerun()
-            with col2:
-                # إصلاح خطأ السنتاكس في علامات التنصيص
-                label = "▶️ بدء (10 ثواني)" if db["status"] != "break" else "▶️ استكمال"
-                if st.button(label):
-                    if db["status"] == "break":
-                        db["status"] = "running"
-                        db["last_update"] = time.time()
-                    else:
-                        db["status"] = "counting"
+            with c3:
+                if st.button("▶️ بدء التايمر"): # بدء التايمر فوراً
+                    db["status"] = "running"
+                    db["last_update"] = time.time()
                     st.rerun()
-            with col3:
-                if st.button("⏸️ راحة (إيقاف)"):
-                    db["status"] = "break"
+            with c4:
+                btn_brk = "⏸️ راحة" if db["status"] == "running" else "▶️ استكمال"
+                if st.button(btn_brk):
+                    if db["status"] == "running": db["status"] = "break"
+                    else: db["status"] = "running"; db["last_update"] = time.time()
                     st.rerun()
-            with col4:
-                if st.button("🛑 إنهاء الروم"):
+            with c5:
+                if st.button("🛑 إنهاء الكل"):
                     db.update({"room_id": None, "members": [], "status": "off"})
                     st.rerun()
 
         st.write("---")
-        st.subheader("📅 إضافة للجدول الخارجي")
-        c_t, c_d = st.columns(2)
-        t_in = c_t.text_input("الوقت (مثلاً 20:00)")
-        d_in = c_d.number_input("المدة (دقيقة)", 5, 120, 45, key="admin_d")
-        if st.button("➕ نشر الموعد"):
+        st.subheader("📅 إدارة المواعيد")
+        ca, cb = st.columns(2)
+        t_in = ca.text_input("الوقت (مثلاً 20:00)")
+        d_in = cb.number_input("المدة", 5, 120, 45, key="ad_d")
+        if st.button("➕ إضافة موعد"):
             db["schedule"].append({"time": t_in, "duration": d_in})
+            st.success("تمت الإضافة")
+        if st.button("🗑️ مسح الجدول بالكامل"): # خيار مسح الجدول
+            db["schedule"] = []
             st.rerun()
 
-# تحديث تلقائي للمتصفح
-if db["room_id"] or db["schedule"]:
+# تحديث تلقائي
+if db["room_id"] and db["status"] != "off":
     time.sleep(2)
     st.rerun()

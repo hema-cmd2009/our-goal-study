@@ -1,11 +1,11 @@
 import streamlit as st
 import requests
 import random
-import time
 
-# 1. إعدادات الهوية والتصميم (Dark Mode + Golden Touch)
+# 1. إعدادات الصفحة والهوية
 st.set_page_config(page_title="our goal study", page_icon="🎓", layout="wide")
 
+# تصميم واجهة احترافية (Dark & Gold) لبرنامج our goal study
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
@@ -19,17 +19,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. البيانات المشتركة (Database)
-@st.cache_resource
-def get_db():
-    # بنحفظ المشتركين هنا عشان نبعت لهم تنبيهات
-    return {"members": [], "status": "off", "room_id": None}
+# 2. قاعدة بيانات وهمية (تخزن في الرام)
+if 'members' not in st.session_state: st.session_state.members = []
+if 'status' not in st.session_state: st.session_state.status = "off"
+if 'room_id' not in st.session_state: st.session_state.room_id = None
 
-db = get_db()
-# توكن بوتك اللي جبته من BotFather
+# التوكن الخاص بك
 TOKEN = "8562331908:AAFVuGeKhct_rV2lQvxVWJSUfQ1HB8TNhK4"
 
-# دالة إرسال الرسائل عبر التليجرام
+# دالة إرسال الرسائل
 def send_telegram_msg(chat_id, text):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     try:
@@ -37,15 +35,15 @@ def send_telegram_msg(chat_id, text):
     except:
         pass
 
-# 3. منطق التنقل بين الصفحات
+# 3. منطق الصفحات
 if 'page' not in st.session_state: st.session_state.page = "login"
 
-# --- الواجهة 1: صفحة الدخول (Login) ---
+# --- صفحة الدخول ---
 if st.session_state.page == "login":
     st.markdown("<p class='logo-text'>our goal study</p>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center;'>سجل دخولك عبر التليجرام لتبدأ رحلة النجاح 🚀</p>", unsafe_allow_html=True)
     
-    # التقاط بيانات التليجرام من رابط الموقع (Query Params)
+    # التقاط بيانات التليجرام من الرابط (Query Params)
     params = st.query_params
     if "id" in params:
         u_id = params["id"]
@@ -53,17 +51,17 @@ if st.session_state.page == "login":
         st.session_state.user_id = u_id
         st.session_state.user_name = u_name
         
-        # حفظ المستخدم في القائمة لإرسال التنبيهات لاحقاً
-        if not any(m['id'] == u_id for m in db["members"]):
-            db["members"].append({"id": u_id, "name": u_name})
-            # إرسال رسالة ترحيبية فورية للطالب على تليجرام
-            welcome_txt = f"أهلاً بك يا {u_name} في our goal study! 🎓\nتم تفعيل التنبيهات.. هبعتلك رسالة هنا أول ما أي روم مذاكرة تبدأ."
+        # إضافة المستخدم للقائمة لإرسال التنبيهات
+        if u_id not in st.session_state.members:
+            st.session_state.members.append(u_id)
+            # رسالة ترحيبية فورية
+            welcome_txt = f"أهلاً بك يا {u_name} في our goal study! 🎓\nتم تفعيل التنبيهات.. سأرسل لك هنا فور بدء أي جلسة مذاكرة."
             send_telegram_msg(u_id, welcome_txt)
             
-        st.session_state.page = "room"
+        st.session_state.page = "main"
         st.rerun()
 
-    # ويدجت زر التليجرام المربوط برابط موقعك
+    # ويدجت التليجرام (الرابط الدقيق المربوط ببوتك)
     telegram_widget = """
     <div style="text-align: center; padding: 20px;">
         <script async src="https://telegram.org/js/telegram-widget.js?22" 
@@ -76,32 +74,34 @@ if st.session_state.page == "login":
     """
     st.components.v1.html(telegram_widget, height=150)
     
-    if st.button("🚀 دخول سريع (كضيف)"):
+    if st.button("🚀 دخول كضيف (بدون تنبيهات)"):
         st.session_state.user_name = "ضيف_مكافح"
-        st.session_state.page = "room"; st.rerun()
+        st.session_state.page = "main"; st.rerun()
 
-# --- الواجهة 2: صفحة الروم (Room) ---
-elif st.session_state.page == "room":
+# --- الصفحة الرئيسية (الروم) ---
+elif st.session_state.page == "main":
     st.markdown(f"## نورت يا {st.session_state.user_name} 👋")
     
     # لوحة تحكم الإدارة (محمية بكلمة سر)
-    with st.expander("🛠️ لوحة تحكم الإدارة"):
+    with st.expander("🛠️ إعدادات الغرفة (للمسؤول فقط)"):
         pwd = st.text_input("كلمة السر", type="password")
         if pwd == "our122122":
-            if st.button("🚀 فتح روم وإرسال تنبيهات للجميع"):
-                db["status"] = "active"
-                db["room_id"] = str(random.randint(1000, 9999))
+            if st.button("🚀 فتح الروم وإرسال تنبيهات تليجرام"):
+                st.session_state.status = "active"
+                st.session_state.room_id = str(random.randint(1000, 9999))
                 
-                # إرسال التنبيه التلقائي لكل المسجلين
-                alert_text = "📢 يا بطل! تم فتح روم مذاكرة جديدة الآن في our goal study.. مستنيينك تحصلنا! 🚀"
-                for member in db["members"]:
-                    if "id" in member:
-                        send_telegram_msg(member["id"], alert_text)
-                st.success("تم فتح الروم وإرسال رسائل التليجرام بنجاح! ✅")
+                # إرسال التنبيه لكل المشتركين
+                alert_text = "📢 يا بطل! بدأت الآن جلسة مذاكرة جديدة في our goal study.. انضم إلينا فوراً! 🚀"
+                for m_id in st.session_state.members:
+                    send_telegram_msg(m_id, alert_text)
+                st.success("تم إرسال التنبيهات بنجاح! ✅")
+            
+            if st.button("🔴 إغلاق الروم"):
+                st.session_state.status = "off"
+                st.rerun()
 
-    # عرض حالة الروم للطلاب
-    if db["status"] == "active":
-        st.success(f"✅ الروم شغالة الآن! كود الانضمام: {db['room_id']}")
-        st.info("الآن ابدأ المذاكرة بتركيز.. التوفيق حليفك.")
+    # عرض حالة الروم
+    if st.session_state.status == "active":
+        st.success(f"✅ الروم نشطة حالياً! كود الدخول: {st.session_state.room_id}")
     else:
-        st.warning("لا توجد رومات نشطة حالياً. انتظر إشعاراً على التليجرام.")
+        st.info("لا توجد رومات نشطة. انتظر تنبيهاً على التليجرام قريباً.")
